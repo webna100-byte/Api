@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مولّد الفيديو</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>مولّد الفيديو</h1>
+    <div id="usage" class="usage" aria-live="polite">…</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>توليد جديد</h2>
+      <form id="form">
+        <label>الوصف
+          <textarea name="prompt" rows="4" required placeholder="مثال: لقطة سينمائية لموج البحر عند الشروق، حركة كاميرا بطيئة…"></textarea>
+        </label>
+
+        <label><span>الصور المرجعية (حتى <span id="max-images">5</span>) — اختياري</span>
+          <input type="file" name="images" id="images" accept="image/png,image/jpeg,image/webp" multiple>
+        </label>
+        <div id="previews" class="previews"></div>
+        <p class="hint">داخل الوصف أشِر للصور بـ <bdi>@Image 1</bdi> و <bdi>@Image 2</bdi> … حسب ترتيب الرفع.</p>
+
+        <div class="grid">
+          <label>المزوّد
+            <select name="provider" id="provider"></select>
+          </label>
+          <label>المدة (ثانية)
+            <input type="number" name="duration" id="duration" min="4" max="15" value="4" required>
+          </label>
+          <label>الدقة
+            <select name="resolution" id="resolution"></select>
+          </label>
+          <label>نسبة العرض
+            <select name="aspectRatio" id="aspectRatio"></select>
+          </label>
+          <label>عدد الفيديوهات
+            <input type="number" name="count" id="count" min="1" max="20" value="1">
+          </label>
+        </div>
+        <p id="provider-info" class="hint"></p>
+        <button type="submit" id="submit">أضف للقائمة</button>
+        <p id="form-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2>قائمة الانتظار</h2>
+        <div class="actions">
+          <button type="button" id="stitch" class="secondary" disabled>دمج المحدد</button>
+          <button type="button" id="clear-queued" class="secondary">إلغاء المنتظر</button>
+          <button type="button" id="clear-finished" class="secondary">مسح المنتهي</button>
+        </div>
+      </div>
+      <div id="paused" class="banner" hidden>
+        <span id="paused-reason"></span>
+        <button type="button" id="resume">استئناف</button>
+      </div>
+      <p id="stitch-result" class="hint"></p>
+      <ul id="jobs" class="jobs"></ul>
+    </section>
+  </main>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

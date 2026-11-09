@@ -1,0 +1,17 @@
+{
+  "name": "multi-provider-video-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local UI + small backend for AI video generation across swappable providers",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20.12" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
