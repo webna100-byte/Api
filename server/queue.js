@@ -1,5 +1,6 @@
 // Sequential generation queue.
-// One job at a time: upload images -> create task -> poll -> download.
+// One job at a time: create task -> poll -> download.
+// (Images are uploaded to the provider beforehand via POST /api/upload.)
 // Stops (pauses) on a credit/quota error or when a usage limit is reached,
 // leaving remaining jobs queued so you can resume after fixing it.
 import fs from 'node:fs';
@@ -17,7 +18,6 @@ const TRANSIENT = new Set(['network', 'rate', 'server']);
 
 const jobs = loadJobs();
 const state = { paused: false, pauseReason: null, working: false };
-const uploadCache = new Map(); // `${batchId}:${provider}` -> urls[]
 const listeners = new Set();
 
 // Recover from a restart: tasks already submitted keep polling (results live ~24h);
@@ -52,7 +52,7 @@ export function getQueueState() {
 }
 
 export function listJobs() {
-  return jobs.map(({ images, ...rest }) => ({ ...rest, imageCount: images?.length || 0 }));
+  return jobs.map((j) => ({ ...j, imageCount: j.imageUrls?.length || 0 }));
 }
 
 export function getJob(id) {
@@ -60,7 +60,7 @@ export function getJob(id) {
 }
 
 /**
- * @param {object} spec  {provider, prompt, duration, resolution, aspectRatio, images:[{path,filename,mimetype}], count}
+ * @param {object} spec  {provider, prompt, duration, resolution, aspectRatio, imageUrls, count}
  */
 export function enqueue(spec) {
   const batchId = crypto.randomUUID();
@@ -74,7 +74,7 @@ export function enqueue(spec) {
       duration: spec.duration,
       resolution: spec.resolution,
       aspectRatio: spec.aspectRatio,
-      images: spec.images,
+      imageUrls: spec.imageUrls,
       status: 'queued',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -163,27 +163,11 @@ async function runJob(job) {
   }
 
   try {
-    let imageUrls = [];
-    if (job.images?.length) {
-      const key = `${job.batchId}:${provider.id}`;
-      imageUrls = uploadCache.get(key);
-      if (!imageUrls) {
-        update(job, { status: 'uploading' });
-        imageUrls = [];
-        for (const img of job.images) {
-          imageUrls.push(await provider.uploadImage({
-            buffer: fs.readFileSync(img.path), filename: img.filename, mimetype: img.mimetype,
-          }));
-        }
-        uploadCache.set(key, imageUrls);
-      }
-    }
-
     update(job, { status: 'submitting' });
     // Never auto-retry submission: a retry after an unclear failure can create a second billed task.
     const { taskId, model } = await provider.createTask({
       prompt: job.prompt,
-      imageUrls,
+      imageUrls: job.imageUrls || [],
       duration: job.duration,
       resolution: job.resolution,
       aspectRatio: job.aspectRatio,

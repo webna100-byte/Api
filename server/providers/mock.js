@@ -68,8 +68,12 @@ const provider = {
     return envBool('MOCK_ENABLED', true);
   },
 
+  uploadEndpoint() {
+    return null; // handled locally
+  },
+
   async uploadImage({ filename }) {
-    return `mock://${filename}`;
+    return `mock://${encodeURIComponent(filename)}`;
   },
 
   async createTask(params) {

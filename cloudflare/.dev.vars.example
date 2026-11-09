@@ -1,0 +1,4 @@
+# Local secrets for `npm run dev` (copy to .dev.vars). On Cloudflare use `wrangler secret put`.
+ACCESS_TOKEN=change-me
+WAVESPEED_API_KEY=
+ATLAS_API_KEY=

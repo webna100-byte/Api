@@ -7,9 +7,24 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="card">
+      <h1>مولّد الفيديو</h1>
+      <label>كلمة السر (ACCESS_TOKEN)
+        <input type="password" id="token" autocomplete="current-password" required>
+      </label>
+      <button type="submit">دخول</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="app" hidden>
   <header>
     <h1>مولّد الفيديو</h1>
-    <div id="usage" class="usage" aria-live="polite">…</div>
+    <div class="header-side">
+      <div id="usage" class="usage" aria-live="polite">…</div>
+      <button type="button" id="logout" class="secondary small" hidden>خروج</button>
+    </div>
   </header>
 
   <main>
@@ -62,10 +77,12 @@
         <span id="paused-reason"></span>
         <button type="button" id="resume">استئناف</button>
       </div>
+      <p id="cloud-note" class="hint" hidden>روابط الفيديو عند المزود بتنتهي (عادة خلال 24 ساعة). الفيديو بيتحمّل تلقائياً لما يجهز والصفحة مفتوحة، أو حمّله يدوياً من زر "تحميل". للدمج: حمّل المقاطع وشغّل النسخة المحلية.</p>
       <p id="stitch-result" class="hint"></p>
       <ul id="jobs" class="jobs"></ul>
     </section>
   </main>
+  </div>
 
   <script src="app.js" type="module"></script>
 </body>

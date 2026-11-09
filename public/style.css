@@ -78,3 +78,9 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .job-actions a { color: var(--accent); }
 .job-actions button { padding: 4px 10px; font-size: 13px; }
 .empty { color: var(--muted); text-align: center; padding: 20px; }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login form { width: 100%; max-width: 360px; }
+.login h1 { margin-bottom: 16px; }
+.header-side { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button.small { padding: 2px 8px; font-size: 12px; }
+[hidden] { display: none !important; }

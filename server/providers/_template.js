@@ -2,16 +2,18 @@
 // register it in ./index.js. Before relying on a provider, check its
 // official page: free credit amount, max free resolution/duration,
 // watermark, and whether it asks for a card. If it asks for a card: skip it.
-import { env } from '../config.js';
-import { requestJson, requireKey, ProviderError } from './http.js';
+import { requestJson, requireKey, ProviderError, envOf } from './http.js';
 
-const provider = {
+export default function createExample(env) {
+  const get = envOf(env);
+  return {
   id: 'example',
   label: 'Example Provider',
   envKey: 'EXAMPLE_API_KEY',
-  baseUrl: env('EXAMPLE_BASE_URL', 'https://api.example.com/v1'),
-  model: env('EXAMPLE_MODEL', 'model-with-images'),
-  modelText: env('EXAMPLE_MODEL_TEXT', 'model-text-only'),
+  env,
+  baseUrl: get('EXAMPLE_BASE_URL', 'https://api.example.com/v1'),
+  model: get('EXAMPLE_MODEL', 'model-with-images'),
+  modelText: get('EXAMPLE_MODEL_TEXT', 'model-text-only'),
   capabilities: {
     minDuration: 4,
     maxDuration: 10,
@@ -21,13 +23,24 @@ const provider = {
   },
 
   isConfigured() {
-    return Boolean(process.env[this.envKey]);
+    return Boolean(get(this.envKey));
+  },
+
+  // Multipart endpoint accepting one "file" field; returns JSON with a URL.
+  uploadEndpoint() {
+    return `${this.baseUrl}/files`;
+  },
+
+  parseUpload(res) {
+    if (!res?.url) throw new ProviderError('Upload returned no URL', 'server');
+    return res.url;
   },
 
   // Return a public URL the provider can download the image from.
   async uploadImage({ buffer, filename, mimetype }) {
-    void buffer; void filename; void mimetype;
-    throw new ProviderError('uploadImage not implemented', 'config');
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: mimetype }), filename);
+    return this.parseUpload(await requestJson(this.uploadEndpoint(), { apiKey: requireKey(this), method: 'POST', form }));
   },
 
   // Return { taskId, model }.
@@ -58,6 +71,5 @@ const provider = {
   async getBalance() {
     return null;
   },
-};
-
-export default provider;
+  };
+}

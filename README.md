@@ -22,6 +22,49 @@ npm start
 
 بدون أي مفتاح، يشتغل مزود **Mock**: يولّد فيديو اختباري محلياً بـ ffmpeg، مجاناً، لتجربة الواجهة والقائمة والحدود والتحميل.
 
+## النشر على Cloudflare (مجاني، بدون بطاقة)
+
+النسخة السحابية بمجلد `cloudflare/` وبتشتغل على خطة Workers المجانية:
+- **Worker:** بيخدم الواجهة من `public/` وبيقدم نفس الـ API.
+- **Durable Object** (SQLite): بيحفظ قائمة الانتظار والعداد، وبيسأل المزود عن الحالة بالـ alarms. يعني التوليد بيكمل حتى لو سكّرت الصفحة.
+- **حماية:** كل `/api` بدها كلمة سر (`ACCESS_TOKEN`). إذا ما انحطت، الـ API بيرفض كل الطلبات.
+
+**ليش مش Firebase:** Cloud Functions وأي bucket جديد بـ Cloud Storage بيحتاجوا خطة Blaze، يعني بطاقة. Cloudflare لحاله بيكفي.
+
+**الفرق عن النسخة المحلية:**
+- ما في تخزين للفيديو على السيرفر، لأن R2 بيطلب بطاقة. الفيديو بيمر من رابط المزود عبر `/api/jobs/:id/video`، وهاد الرابط بينتهي (عادة 24 ساعة). الواجهة بتحمّله تلقائياً لما يجهز والصفحة مفتوحة.
+- ما في دمج ffmpeg ولا مزود Mock. للدمج: حمّل المقاطع وشغّل النسخة المحلية.
+
+### خطوات النشر
+
+```bash
+cd cloudflare && npm install
+```
+```bash
+npx wrangler login
+```
+```bash
+npx wrangler deploy
+```
+```bash
+npx wrangler secret put ACCESS_TOKEN
+```
+```bash
+npx wrangler secret put WAVESPEED_API_KEY
+```
+
+أو من لوحة Cloudflare: Workers & Pages ← video-ui ← Settings ← Variables and Secrets. الحدود (`MAX_GENERATIONS_TOTAL` وغيرها) بـ `vars` داخل `cloudflare/wrangler.jsonc`.
+
+### اختبار بدون رصيد
+
+`tests/fake-provider.mjs` سيرفر وهمي بيقلّد API تبع WaveSpeed:
+
+```bash
+node tests/fake-provider.mjs 4010 2
+```
+
+بعدها حط `WAVESPEED_API_KEY=test-key` و `WAVESPEED_BASE_URL=http://127.0.0.1:4010/api/v3` بـ `.env` (محلي) أو `cloudflare/.dev.vars` (لـ `npm run dev`). الرقم `2` يعني: خطأ رصيد بعد مهمتين.
+
 ## البنية
 
 ```
@@ -31,6 +74,7 @@ server/
   queue.js            قائمة انتظار متتابعة: رفع صور → إنشاء مهمة → فحص → تحميل
   store.js            عداد الاستخدام والحدود (data/usage.json) وسجل المهام
   stitch.js           دمج مقاطع بـ ffmpeg
+  validate.js         التحقق من الطلبات (مشترك مع Cloudflare)
   providers/
     http.js           طلبات HTTP وتصنيف الأخطاء (رصيد / مفتاح / حد طلبات …)
     wavespeed.js      WaveSpeedAI
@@ -38,14 +82,17 @@ server/
     mock.js           مزود تجريبي محلي
     _template.js      قالب لمزود جديد
     index.js          سجل المزودين
-public/               الواجهة (عربي، RTL)
+cloudflare/
+  src/worker.js       Worker + Durable Object (نفس الـ API)
+  wrangler.jsonc      إعدادات النشر
+public/               الواجهة (عربي، RTL)، مشتركة بين النسختين
 tools/upscale.sh      رفع الدقة محلياً بـ Real-ESRGAN
 output/               الفيديوهات المحمّلة
 ```
 
-كل adapter فيه: `baseUrl`، `envKey`، اسم الموديل، `uploadImage`، `createTask`، `getStatus`، `getResult`، و `getBalance` (اختياري).
+كل adapter فيه: `baseUrl`، `envKey`، اسم الموديل، `uploadEndpoint`/`uploadImage`، `createTask`، `getStatus`، `getResult`، و `getBalance` (اختياري). الـ adapters بتشتغل على Node وCloudflare بنفس الكود.
 
-**إضافة مزود:** انسخ `server/providers/_template.js`، عبّيه، وأضفه للقائمة في `server/providers/index.js`.
+**إضافة مزود:** انسخ `server/providers/_template.js`، عبّيه، وأضفه في `server/providers/index.js` و `cloudflare/src/worker.js`.
 
 ## الحماية من صرف الرصيد
 
@@ -91,10 +138,14 @@ output/               الفيديوهات المحمّلة
 |---|---|
 | `GET /api/providers` | المزودين وقدراتهم |
 | `GET /api/usage?balance=1` | العداد والرصيد |
-| `POST /api/jobs` | multipart: `prompt, provider, duration, resolution, aspectRatio, count, images[]` |
+| `POST /api/upload?provider=` | multipart بحقل `file` (صورة وحدة) ← `{ url }` |
+| `POST /api/jobs` | JSON: `prompt, provider, duration, resolution, aspectRatio, count, imageUrls[]` |
+| `GET /api/jobs/:id/video` | (Cloudflare) الفيديو من رابط المزود، `?download=1` للتحميل |
 | `GET /api/jobs` | المهام وحالة القائمة |
 | `DELETE /api/jobs/:id` | إلغاء مهمة منتظرة |
 | `POST /api/jobs/:id/retry` | إعادة مهمة فاشلة |
 | `POST /api/queue/resume` | استئناف |
 | `POST /api/queue/clear` | إلغاء كل المنتظر |
-| `POST /api/stitch` | `{ jobIds: [...] }` |
+| `POST /api/stitch` | `{ jobIds: [...] }` (محلي فقط) |
+
+على Cloudflare كل الطلبات بدها `Authorization: Bearer <ACCESS_TOKEN>` (أو `?token=` لروابط الفيديو).

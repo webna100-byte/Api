@@ -40,7 +40,7 @@ function extractMessage(body, fallback) {
  * and on 200 responses whose body carries a non-200 "code" field
  * (both WaveSpeed and Atlas wrap responses as {code, message, data}).
  */
-export async function requestJson(url, { apiKey, method = 'GET', json, form, timeoutMs = 60_000 } = {}) {
+export async function requestJson(url, { apiKey, method = 'GET', json, form, raw, contentType, timeoutMs = 60_000 } = {}) {
   const headers = {};
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   let body;
@@ -49,6 +49,9 @@ export async function requestJson(url, { apiKey, method = 'GET', json, form, tim
     body = JSON.stringify(json);
   } else if (form) {
     body = form; // fetch sets the multipart boundary itself
+  } else if (raw) {
+    body = raw; // pre-encoded body streamed through as-is (Cloudflare upload proxy)
+    if (contentType) headers['Content-Type'] = contentType;
   }
 
   let res;
@@ -73,8 +76,16 @@ export async function requestJson(url, { apiKey, method = 'GET', json, form, tim
   return parsed;
 }
 
+/** Returns a getter that treats empty strings as unset. */
+export function envOf(env) {
+  return (name, fallback = '') => {
+    const v = env?.[name];
+    return v === undefined || v === null || v === '' ? fallback : String(v);
+  };
+}
+
 export function requireKey(provider) {
-  const key = process.env[provider.envKey];
-  if (!key) throw new ProviderError(`${provider.envKey} is not set in .env`, 'config');
+  const key = provider.env?.[provider.envKey];
+  if (!key) throw new ProviderError(`${provider.envKey} is not set`, 'config');
   return key;
 }

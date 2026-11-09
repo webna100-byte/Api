@@ -16,12 +16,43 @@ let maxImages = 5;
 const selected = new Set();
 const seenDone = new Set();
 let firstLoad = true;
+let features = { stitch: true, auth: false, serverFiles: true };
+
+// Access token for the Cloudflare deployment (ignored by the local server).
+const store = {
+  get() { try { return localStorage.getItem('accessToken') || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem('accessToken', v); } catch { /* private mode */ } },
+};
+let token = store.get();
+
+class AuthError extends Error {}
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, opts);
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new AuthError('unauthorized');
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
+}
+
+function postJson(path, body) {
+  return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+function videoUrl(job, download = false) {
+  if (features.serverFiles) return `/output/${encodeURIComponent(job.file)}`;
+  const q = new URLSearchParams({ token });
+  if (download) q.set('download', '1');
+  return `/api/jobs/${job.id}/video?${q}`;
+}
+
+function showLogin(message = '') {
+  $('#login').hidden = false;
+  $('#app').hidden = true;
+  $('#login-error').textContent = message;
+  $('#token').focus();
 }
 
 function fillSelect(sel, values, keep) {
@@ -57,6 +88,10 @@ async function loadProviders() {
   const data = await api('/api/providers');
   providers = data.providers;
   maxImages = data.maxImages;
+  features = { ...features, ...data.features };
+  $('#stitch').hidden = !features.stitch;
+  $('#cloud-note').hidden = features.serverFiles;
+  $('#logout').hidden = !features.auth;
   const sel = $('#provider');
   sel.replaceChildren(...providers.map((p) => {
     const o = new Option(p.configured ? p.label : `${p.label} — بدون مفتاح`, p.id);
@@ -90,7 +125,7 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function autoDownload(job) {
-  const a = el('a', { href: `/output/${encodeURIComponent(job.file)}`, download: job.file });
+  const a = el('a', { href: videoUrl(job, true), download: job.file || '' });
   document.body.append(a);
   a.click();
   a.remove();
@@ -106,13 +141,13 @@ function renderJobs(jobs, q) {
     return true;
   }
   const items = [...jobs].reverse().map((j) => {
-    const done = j.status === 'succeeded' && j.file;
+    const done = j.status === 'succeeded' && (j.file || j.remoteUrl);
     if (done && !seenDone.has(j.id)) {
       seenDone.add(j.id);
       if (!firstLoad) autoDownload(j);
     }
     const head = el('div', { class: 'job-head' },
-      done ? el('input', {
+      done && features.stitch ? el('input', {
         type: 'checkbox', checked: selected.has(j.id), 'aria-label': 'اختيار للدمج',
         onchange: (e) => { e.target.checked ? selected.add(j.id) : selected.delete(j.id); updateStitch(); },
         style: 'width:auto',
@@ -123,7 +158,7 @@ function renderJobs(jobs, q) {
       j.providerStatus && j.status === 'running' ? el('span', {}, `(${j.providerStatus})`) : null,
     );
     const actions = el('div', { class: 'job-actions' },
-      done ? el('a', { href: `/output/${encodeURIComponent(j.file)}`, download: j.file }, 'تحميل') : null,
+      done ? el('a', { href: videoUrl(j, true), download: j.file || '' }, 'تحميل') : null,
       j.status === 'queued' ? el('button', { type: 'button', class: 'secondary', onclick: () => act(`/api/jobs/${j.id}`, 'DELETE') }, 'إلغاء') : null,
       ['failed', 'cancelled'].includes(j.status) ? el('button', { type: 'button', class: 'secondary', onclick: () => act(`/api/jobs/${j.id}/retry`) }, 'إعادة') : null,
     );
@@ -131,7 +166,7 @@ function renderJobs(jobs, q) {
       head,
       el('div', { class: 'job-prompt' }, j.prompt),
       j.error ? el('div', { class: 'job-err' }, j.error) : null,
-      done ? el('video', { src: `/output/${encodeURIComponent(j.file)}`, controls: true, preload: 'metadata' }) : null,
+      done ? el('video', { src: videoUrl(j), controls: true, preload: 'metadata' }) : null,
       actions,
     );
   });
@@ -157,13 +192,14 @@ async function refresh() {
     }
     firstLoad = false;
   } catch (e) {
-    console.error(e);
+    if (e instanceof AuthError) showLogin('انتهت الجلسة أو كلمة السر غلط.');
+    else console.error(e);
   }
 }
 
-async function act(path, method = 'POST', body) {
+async function act(path, method = 'POST') {
   try {
-    await api(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    await api(path, { method });
   } catch (e) {
     alert(e.message);
   }
@@ -184,19 +220,42 @@ $('#form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#form-error').textContent = '';
   const fd = new FormData(e.target);
+  const files = [...$('#images').files];
   const cap = Math.min(maxImages, currentProvider()?.capabilities.maxImages ?? maxImages);
-  if ($('#images').files.length > cap) {
+  if (files.length > cap) {
     $('#form-error').textContent = `الحد الأقصى ${cap} صور`;
     return;
   }
+  const provider = fd.get('provider');
   $('#submit').disabled = true;
   try {
-    await api('/api/jobs', { method: 'POST', body: fd });
+    // Step 1: upload each image to the provider (via our server, which holds the key).
+    const imageUrls = [];
+    for (const [i, f] of files.entries()) {
+      if (f.size > 10 * 1024 * 1024) throw new Error(`الصورة ${i + 1} أكبر من 10MB`);
+      $('#submit').textContent = `رفع الصورة ${i + 1}/${files.length}…`;
+      const body = new FormData();
+      body.append('file', f, f.name);
+      const { url } = await api(`/api/upload?provider=${encodeURIComponent(provider)}`, { method: 'POST', body });
+      imageUrls.push(url);
+    }
+    // Step 2: queue the generation(s).
+    await postJson('/api/jobs', {
+      provider,
+      prompt: fd.get('prompt'),
+      duration: fd.get('duration'),
+      resolution: fd.get('resolution'),
+      aspectRatio: fd.get('aspectRatio'),
+      count: fd.get('count'),
+      imageUrls,
+    });
     refresh();
   } catch (err) {
-    $('#form-error').textContent = err.message;
+    if (err instanceof AuthError) showLogin();
+    else $('#form-error').textContent = err.message;
   } finally {
     $('#submit').disabled = false;
+    $('#submit').textContent = 'أضف للقائمة';
   }
 });
 
@@ -210,7 +269,7 @@ $('#stitch').addEventListener('click', async () => {
   $('#stitch').disabled = true;
   $('#stitch-result').textContent = 'جاري الدمج…';
   try {
-    const { file } = await api('/api/stitch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobIds: ids }) });
+    const { file } = await postJson('/api/stitch', { jobIds: ids });
     $('#stitch-result').replaceChildren('تم الدمج: ', el('a', { href: `/output/${encodeURIComponent(file)}`, download: file }, file));
   } catch (err) {
     $('#stitch-result').textContent = err.message;
@@ -219,7 +278,29 @@ $('#stitch').addEventListener('click', async () => {
   }
 });
 
-await loadProviders();
-await loadUsage(true);
-await refresh();
-setInterval(refresh, 2000);
+$('#login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  token = $('#token').value.trim();
+  store.set(token);
+  start();
+});
+$('#logout').addEventListener('click', () => { token = ''; store.set(''); showLogin(); });
+
+let timer = null;
+async function start() {
+  try {
+    await loadProviders();
+    $('#login').hidden = true;
+    $('#app').hidden = false;
+    await loadUsage(true);
+    lastJson = '';
+    await refresh();
+    clearInterval(timer);
+    timer = setInterval(refresh, 2000);
+  } catch (e) {
+    if (e instanceof AuthError) showLogin(token ? 'كلمة السر غلط.' : '');
+    else showLogin(`خطأ بالاتصال بالسيرفر: ${e.message}`);
+  }
+}
+
+start();

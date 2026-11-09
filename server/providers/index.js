@@ -1,23 +1,17 @@
-// Provider registry. To add a provider: copy _template.js, fill it in,
-// and add it to this list. Nothing else in the app needs to change.
-import wavespeed from './wavespeed.js';
-import atlas from './atlas.js';
+// Provider registry for the Node server. To add a provider: copy
+// _template.js, fill it in, and add it here (and in cloudflare/src/worker.js
+// if it should run on Cloudflare too).
+import createWavespeed from './wavespeed.js';
+import createAtlas from './atlas.js';
 import mock from './mock.js';
+import { publicProviders } from '../validate.js';
 
-const providers = [wavespeed, atlas, mock];
+const providers = [createWavespeed(process.env), createAtlas(process.env), mock];
 
 export function getProvider(id) {
   return providers.find((p) => p.id === id);
 }
 
 export function listProviders() {
-  return providers.map((p) => ({
-    id: p.id,
-    label: p.label,
-    configured: p.isConfigured(),
-    envKey: p.envKey,
-    model: p.model,
-    modelText: p.modelText,
-    capabilities: p.capabilities,
-  }));
+  return publicProviders(providers);
 }
