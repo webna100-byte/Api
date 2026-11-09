@@ -1,18 +1,18 @@
 {
-  // Cloudflare Workers Free plan: no card needed. Static assets, Durable
+  // Cloudflare Workers Free plan: no card needed. Durable
   // Objects (SQLite-backed) and alarms are all included in the free tier.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "video-ui",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
-  "assets": {
-    "directory": "../public",
-    "binding": "ASSETS"
-  },
+  // The UI (../public) is bundled into the Worker by build-assets.mjs.
+  "build": { "command": "node build-assets.mjs" },
   "durable_objects": {
     "bindings": [{ "name": "QUEUE", "class_name": "QueueDO" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QueueDO"] }],
+  "workers_dev": true,
+  "preview_urls": false,
   "observability": { "enabled": true },
   // Non-secret settings. Secrets (API keys, ACCESS_TOKEN) are set with
   // `wrangler secret put NAME` or in the dashboard, never here.

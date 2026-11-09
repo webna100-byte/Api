@@ -1,6 +1,6 @@
 // Cloudflare Worker: same JSON API as the local Node server (server/index.js),
 // running on the Workers Free plan (no card).
-//  - Static UI is served from ../public by Workers Static Assets.
+//  - The UI in ../public is bundled into the Worker (build-assets.mjs).
 //  - API keys live in Worker secrets, never in the browser.
 //  - The queue, usage counter and job history live in one SQLite-backed
 //    Durable Object, which polls providers with alarms, so generation keeps
@@ -13,6 +13,7 @@ import createWavespeed from '../../server/providers/wavespeed.js';
 import createAtlas from '../../server/providers/atlas.js';
 import { requestJson, ProviderError } from '../../server/providers/http.js';
 import { validateJob, publicProviders, MAX_IMAGES } from '../../server/validate.js';
+import STATIC from './static.generated.js';
 
 const ACTIVE = new Set(['submitting', 'running']);
 const TRANSIENT = new Set(['network', 'rate', 'server']);
@@ -49,7 +50,7 @@ async function authorized(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if (!url.pathname.startsWith('/api/')) return serveStatic(url.pathname);
 
     // Fail closed: a public URL with provider keys must never be open.
     if (!env.ACCESS_TOKEN) return json({ error: 'ACCESS_TOKEN secret is not set on the Worker' }, 503);
@@ -85,6 +86,14 @@ export default {
     return stub.fetch(request);
   },
 };
+
+function serveStatic(pathname) {
+  const file = STATIC[pathname];
+  if (!file) return new Response('Not found', { status: 404 });
+  return new Response(file.body, {
+    headers: { 'Content-Type': file.type, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' },
+  });
+}
 
 // Streams the browser's multipart upload straight to the provider (no parsing,
 // so it stays within the Free plan's CPU limit).
