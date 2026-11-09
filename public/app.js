@@ -73,15 +73,26 @@ function applyProvider() {
   if (!$('#resolution').dataset.touched) $('#resolution').value = c.resolutions[0]; // cheapest by default
   fillSelect($('#aspectRatio'), c.aspectRatios, true);
   const d = $('#duration');
-  d.min = c.minDuration;
-  d.max = c.maxDuration;
-  if (+d.value < c.minDuration) d.value = c.minDuration;
-  if (+d.value > c.maxDuration) d.value = c.maxDuration;
+  d.min = 1;
+  d.max = 20; // the field always offers up to 20s; checkDuration() warns per provider
   const cap = Math.min(maxImages, c.maxImages);
   $('#max-images').textContent = cap;
   $('#provider-info').textContent =
-    `الموديل: ${p.model} · المدة ${c.minDuration}–${c.maxDuration} ث · حتى ${cap} صور` +
-    (c.maxDuration < 20 ? ' · لمدة أطول: ولّد مقاطع وادمجها.' : '');
+    `الموديل: ${p.model} · المدة ${c.minDuration}–${c.maxDuration} ث · حتى ${cap} صور`;
+  checkDuration();
+}
+
+function checkDuration() {
+  const p = currentProvider();
+  const v = Number($('#duration').value);
+  let msg = '';
+  if (p && v) {
+    const c = p.capabilities;
+    if (v > c.maxDuration) msg = `${p.label} أقصى مدة عنده ${c.maxDuration} ثانية. خفّض المدة أو اختار مزود تاني.`;
+    else if (v < c.minDuration) msg = `${p.label} أقل مدة عنده ${c.minDuration} ثواني.`;
+  }
+  $('#duration-warn').textContent = msg;
+  $('#submit').disabled = Boolean(msg);
 }
 
 async function loadProviders() {
@@ -207,6 +218,7 @@ async function act(path, method = 'POST') {
 }
 
 $('#provider').addEventListener('change', applyProvider);
+$('#duration').addEventListener('input', checkDuration);
 $('#resolution').addEventListener('change', (e) => { e.target.dataset.touched = '1'; });
 
 $('#images').addEventListener('change', (e) => {
@@ -254,7 +266,7 @@ $('#form').addEventListener('submit', async (e) => {
     if (err instanceof AuthError) showLogin();
     else $('#form-error').textContent = err.message;
   } finally {
-    $('#submit').disabled = false;
+    checkDuration();
     $('#submit').textContent = 'أضف للقائمة';
   }
 });

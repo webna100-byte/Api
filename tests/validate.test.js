@@ -15,7 +15,9 @@ test('accepts a valid job', () => {
 
 test('rejects bad input', () => {
   assert.match(validateJob(createWavespeed({}), ok).error, /not configured/);
-  assert.match(validateJob(ws, { ...ok, duration: 20 }).error, /Duration/);
+  assert.match(validateJob(ws, { ...ok, duration: 20 }).error, /4–15/);
+  assert.match(validateJob(ws, { ...ok, duration: 25 }).error, /بين 1 و 20/);
+  assert.equal(validateJob(createWavespeed({ WAVESPEED_API_KEY: 'k', WAVESPEED_MAX_DURATION: '20' }), { ...ok, duration: 20 }).error, undefined);
   assert.match(validateJob(ws, { ...ok, resolution: '8k' }).error, /Resolution/);
   assert.match(validateJob(ws, { ...ok, imageUrls: Array(6).fill('https://x/y.png') }).error, /Max 5/);
   assert.match(validateJob(ws, { ...ok, imageUrls: ['file:///etc/passwd'] }).error, /Invalid image/);

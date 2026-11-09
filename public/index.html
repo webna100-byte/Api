@@ -46,7 +46,7 @@
             <select name="provider" id="provider"></select>
           </label>
           <label>المدة (ثانية)
-            <input type="number" name="duration" id="duration" min="4" max="15" value="4" required>
+            <input type="number" name="duration" id="duration" min="1" max="20" value="4" required>
           </label>
           <label>الدقة
             <select name="resolution" id="resolution"></select>
@@ -58,6 +58,7 @@
             <input type="number" name="count" id="count" min="1" max="20" value="1">
           </label>
         </div>
+        <p id="duration-warn" class="error" role="alert"></p>
         <p id="provider-info" class="hint"></p>
         <button type="submit" id="submit">أضف للقائمة</button>
         <p id="form-error" class="error" role="alert"></p>

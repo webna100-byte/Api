@@ -2,6 +2,8 @@
 
 export const MAX_IMAGES = 5;
 export const MAX_BATCH = 20;
+// Longest duration the UI offers. Each provider has its own (lower or equal) limit.
+export const MAX_DURATION = 20;
 
 /**
  * @returns {{ spec?: object, error?: string }}
@@ -16,8 +18,9 @@ export function validateJob(provider, body) {
 
   const cap = provider.capabilities;
   const duration = Number.parseInt(body.duration, 10);
-  if (!(duration >= cap.minDuration && duration <= cap.maxDuration)) {
-    return { error: `Duration must be ${cap.minDuration}-${cap.maxDuration}s for ${provider.label}. For longer videos, generate clips and stitch them.` };
+  if (!(duration >= 1 && duration <= MAX_DURATION)) return { error: `المدة لازم تكون بين 1 و ${MAX_DURATION} ثانية` };
+  if (duration < cap.minDuration || duration > cap.maxDuration) {
+    return { error: `${provider.label} بيقبل ${cap.minDuration}–${cap.maxDuration} ثانية بالموديل الحالي. اختار مدة ضمن هاد المجال أو مزود تاني.` };
   }
   const resolution = String(body.resolution);
   if (!cap.resolutions.includes(resolution)) return { error: `Resolution must be one of ${cap.resolutions.join(', ')}` };

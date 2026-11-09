@@ -23,7 +23,8 @@ export default function createWavespeed(env) {
     modelText: get('WAVESPEED_MODEL_TEXT', 'bytedance/seedance-2.0/text-to-video'),
     capabilities: {
       minDuration: 4,
-      maxDuration: 15,
+      // Seedance 2.0 = 15s. Raise via WAVESPEED_MAX_DURATION if you switch to a longer model.
+      maxDuration: Math.min(Number.parseInt(get('WAVESPEED_MAX_DURATION', '15'), 10) || 15, 20),
       resolutions: ['480p', '720p', '1080p'],
       aspectRatios: ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
       maxImages: 5,

@@ -23,7 +23,8 @@ export default function createAtlas(env) {
     modelText: get('ATLAS_MODEL', 'bytedance/seedance-2.0/text-to-video'),
     capabilities: {
       minDuration: 4,
-      maxDuration: 15,
+      // Seedance 2.0 = 15s. Raise via ATLAS_MAX_DURATION if you switch to a longer model.
+      maxDuration: Math.min(Number.parseInt(get('ATLAS_MAX_DURATION', '15'), 10) || 15, 20),
       resolutions: ['480p', '720p', '1080p'],
       aspectRatios: ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9', 'adaptive'],
       maxImages: 5,
